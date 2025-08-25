@@ -1,0 +1,1421 @@
+class GameOfLife {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.cellSize = 10;
+        this.cols = Math.floor(canvas.width / this.cellSize);
+        this.rows = Math.floor(canvas.height / this.cellSize);
+        
+        // Game state
+        this.grid = this.createEmptyGrid();
+        this.isRunning = false;
+        this.generation = 0;
+        this.speed = 10; // Updates per second
+        this.lastUpdate = 0;
+        this.previousPopulation = 0;
+        
+        // Enhanced statistics
+        this.history = []; // Store grid states for time travel
+        this.populationHistory = [];
+        this.birthHistory = [];
+        this.deathHistory = [];
+        this.maxPopulation = 0;
+        this.stabilityCounter = 0;
+        this.lastFewStates = [];
+        
+        // Chart canvases
+        this.populationChart = null;
+        this.rateChart = null;
+        
+        // Colors - Updated for elegant theme
+        this.colors = {
+            dead: '#0f0f23',
+            alive: '#00d9ff',
+            grid: 'rgba(255, 255, 255, 0.03)',
+            hover: '#e94560'
+        };
+        
+        this.setupEventListeners();
+        this.initializeCharts();
+        this.saveState(); // Save initial state
+        this.render();
+        this.updateStats();
+    }
+    
+    createEmptyGrid() {
+        return Array(this.rows).fill().map(() => Array(this.cols).fill(0));
+    }
+    
+    setupEventListeners() {
+        // Mouse events for cell toggling
+        this.canvas.addEventListener('click', (e) => this.handleCellClick(e));
+        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        this.canvas.addEventListener('mouseleave', () => {
+            this.hoverCell = null;
+            this.render();
+        });
+        
+        // Touch events for mobile
+        this.canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = this.canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            this.toggleCell(x, y);
+        });
+    }
+    
+    handleCellClick(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        this.toggleCell(x, y);
+    }
+    
+    handleMouseMove(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const col = Math.floor(x / this.cellSize);
+        const row = Math.floor(y / this.cellSize);
+        
+        if (col >= 0 && col < this.cols && row >= 0 && row < this.rows) {
+            this.hoverCell = { row, col };
+        } else {
+            this.hoverCell = null;
+        }
+        this.render();
+    }
+    
+    toggleCell(x, y) {
+        const col = Math.floor(x / this.cellSize);
+        const row = Math.floor(y / this.cellSize);
+        
+        if (col >= 0 && col < this.cols && row >= 0 && row < this.rows) {
+            this.grid[row][col] = this.grid[row][col] ? 0 : 1;
+            this.render();
+            this.updateStats();
+        }
+    }
+    
+    countNeighbors(row, col) {
+        let count = 0;
+        for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+                if (i === 0 && j === 0) continue;
+                
+                const newRow = row + i;
+                const newCol = col + j;
+                
+                if (newRow >= 0 && newRow < this.rows && 
+                    newCol >= 0 && newCol < this.cols) {
+                    count += this.grid[newRow][newCol];
+                }
+            }
+        }
+        return count;
+    }
+    
+    nextGeneration() {
+        const newGrid = this.createEmptyGrid();
+        let births = 0;
+        let deaths = 0;
+        
+        for (let row = 0; row < this.rows; row++) {
+            for (let col = 0; col < this.cols; col++) {
+                const neighbors = this.countNeighbors(row, col);
+                const currentCell = this.grid[row][col];
+                
+                // Conway's Game of Life rules
+                if (currentCell === 1) {
+                    // Live cell with 2 or 3 neighbors survives
+                    if (neighbors === 2 || neighbors === 3) {
+                        newGrid[row][col] = 1;
+                    } else {
+                        deaths++; // Cell dies
+                    }
+                } else {
+                    // Dead cell with exactly 3 neighbors becomes alive
+                    if (neighbors === 3) {
+                        newGrid[row][col] = 1;
+                        births++; // Cell is born
+                    }
+                }
+            }
+        }
+        
+        this.grid = newGrid;
+        this.generation++;
+        
+        // Track statistics
+        this.birthHistory.push(births);
+        this.deathHistory.push(deaths);
+        this.saveState();
+        this.updateStats();
+        this.updateCharts();
+        this.render();
+    }
+    
+    saveState() {
+        // Save current grid state for time travel
+        const gridCopy = this.grid.map(row => [...row]);
+        this.history.push(gridCopy);
+        
+        const population = this.countLivingCells();
+        this.populationHistory.push(population);
+        
+        // Update max population
+        if (population > this.maxPopulation) {
+            this.maxPopulation = population;
+        }
+        
+        // Check for stability (oscillators, still lifes)
+        const gridString = JSON.stringify(this.grid);
+        this.lastFewStates.push(gridString);
+        if (this.lastFewStates.length > 10) {
+            this.lastFewStates.shift();
+        }
+        
+        // Check if current state appeared recently (indicates oscillation or stability)
+        const recentOccurrence = this.lastFewStates.slice(0, -1).indexOf(gridString);
+        if (recentOccurrence !== -1) {
+            this.stabilityCounter++;
+        } else {
+            this.stabilityCounter = 0;
+        }
+    }
+    
+    goToGeneration(targetGen) {
+        if (targetGen >= 0 && targetGen < this.history.length) {
+            this.generation = targetGen;
+            this.grid = this.history[targetGen].map(row => [...row]);
+            this.render();
+            this.updateStats();
+            this.updateProgressBar();
+        }
+    }
+    
+    initializeCharts() {
+        this.populationChart = document.getElementById('populationChart');
+        this.rateChart = document.getElementById('rateChart');
+        
+        // Set proper canvas sizing
+        this.resizeCharts();
+    }
+    
+    resizeCharts() {
+        const containers = document.querySelectorAll('.chart-container');
+        containers.forEach(container => {
+            const canvas = container.querySelector('canvas');
+            if (canvas) {
+                const rect = container.getBoundingClientRect();
+                const dpr = window.devicePixelRatio || 1;
+                
+                // Set display size
+                canvas.style.width = rect.width + 'px';
+                canvas.style.height = rect.height + 'px';
+                
+                // Set actual size in memory (scaled for retina displays)
+                canvas.width = rect.width * dpr;
+                canvas.height = rect.height * dpr;
+                
+                // Scale the drawing context so everything draws at the correct size
+                const ctx = canvas.getContext('2d');
+                ctx.scale(dpr, dpr);
+            }
+        });
+    }
+    
+    updateCharts() {
+        this.drawPopulationChart();
+        this.drawRateChart();
+        this.updateProgressBar();
+    }
+    
+    drawPopulationChart() {
+        const canvas = this.populationChart;
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        
+        // Clear canvas
+        ctx.fillStyle = '#0f0f23';
+        ctx.fillRect(0, 0, width, height);
+        
+        if (this.populationHistory.length < 2) return;
+        
+        // Draw grid
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = (height / 5) * i;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+        
+        // Draw population line
+        const maxPop = Math.max(...this.populationHistory);
+        const minPop = Math.min(...this.populationHistory);
+        const range = maxPop - minPop || 1;
+        
+        ctx.strokeStyle = '#00d9ff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        const pointsToShow = Math.min(this.populationHistory.length, 100);
+        const startIndex = Math.max(0, this.populationHistory.length - pointsToShow);
+        
+        for (let i = 0; i < pointsToShow; i++) {
+            const dataIndex = startIndex + i;
+            const x = (width / (pointsToShow - 1)) * i;
+            const normalizedValue = (this.populationHistory[dataIndex] - minPop) / range;
+            const y = height - (normalizedValue * height);
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        
+        ctx.stroke();
+        
+        // Draw current generation marker
+        if (this.generation < this.populationHistory.length) {
+            const currentIndex = Math.max(0, this.generation - startIndex);
+            if (currentIndex >= 0 && currentIndex < pointsToShow) {
+                const x = (width / (pointsToShow - 1)) * currentIndex;
+                const normalizedValue = (this.populationHistory[this.generation] - minPop) / range;
+                const y = height - (normalizedValue * height);
+                
+                ctx.fillStyle = '#e94560';
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+    
+    drawRateChart() {
+        const canvas = this.rateChart;
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        
+        // Clear canvas
+        ctx.fillStyle = '#0f0f23';
+        ctx.fillRect(0, 0, width, height);
+        
+        if (this.birthHistory.length < 2) return;
+        
+        // Draw grid
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = (height / 5) * i;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+        
+        const maxRate = Math.max(...this.birthHistory, ...this.deathHistory);
+        const pointsToShow = Math.min(this.birthHistory.length, 100);
+        const startIndex = Math.max(0, this.birthHistory.length - pointsToShow);
+        
+        // Draw birth rate line
+        ctx.strokeStyle = '#00ff88';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        for (let i = 0; i < pointsToShow; i++) {
+            const dataIndex = startIndex + i;
+            const x = (width / (pointsToShow - 1)) * i;
+            const y = height - ((this.birthHistory[dataIndex] / maxRate) * height);
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+        
+        // Draw death rate line
+        ctx.strokeStyle = '#ff6b6b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        for (let i = 0; i < pointsToShow; i++) {
+            const dataIndex = startIndex + i;
+            const x = (width / (pointsToShow - 1)) * i;
+            const y = height - ((this.deathHistory[dataIndex] / maxRate) * height);
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+    }
+    
+    updateProgressBar() {
+        const progressBar = document.getElementById('progressFill');
+        const progressThumb = document.getElementById('progressThumb');
+        const currentGenLabel = document.getElementById('currentGenLabel');
+        const maxGenLabel = document.getElementById('maxGenLabel');
+        
+        const maxGen = this.history.length - 1;
+        const progress = maxGen > 0 ? (this.generation / maxGen) * 100 : 0;
+        
+        progressBar.style.width = progress + '%';
+        progressThumb.style.left = progress + '%';
+        
+        currentGenLabel.textContent = `Current: ${this.generation}`;
+        maxGenLabel.textContent = `Max: ${maxGen}`;
+    }
+    
+    render() {
+        // Clear canvas
+        this.ctx.fillStyle = this.colors.dead;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Draw grid lines
+        this.ctx.strokeStyle = this.colors.grid;
+        this.ctx.lineWidth = 0.5;
+        
+        // Vertical lines
+        for (let col = 0; col <= this.cols; col++) {
+            const x = col * this.cellSize;
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.canvas.height);
+            this.ctx.stroke();
+        }
+        
+        // Horizontal lines
+        for (let row = 0; row <= this.rows; row++) {
+            const y = row * this.cellSize;
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.canvas.width, y);
+            this.ctx.stroke();
+        }
+        
+        // Draw cells with glow effect
+        for (let row = 0; row < this.rows; row++) {
+            for (let col = 0; col < this.cols; col++) {
+                if (this.grid[row][col] === 1) {
+                    const x = col * this.cellSize + 1;
+                    const y = row * this.cellSize + 1;
+                    const size = this.cellSize - 2;
+                    
+                    // Add subtle glow effect
+                    this.ctx.shadowColor = this.colors.alive;
+                    this.ctx.shadowBlur = 3;
+                    this.ctx.fillStyle = this.colors.alive;
+                    this.ctx.fillRect(x, y, size, size);
+                    
+                    // Reset shadow
+                    this.ctx.shadowBlur = 0;
+                }
+            }
+        }
+        
+        // Draw hover effect
+        if (this.hoverCell && !this.isRunning) {
+            const { row, col } = this.hoverCell;
+            this.ctx.fillStyle = this.colors.hover;
+            this.ctx.globalAlpha = 0.3;
+            this.ctx.fillRect(
+                col * this.cellSize + 1,
+                row * this.cellSize + 1,
+                this.cellSize - 2,
+                this.cellSize - 2
+            );
+            this.ctx.globalAlpha = 1;
+        }
+    }
+    
+    updateStats() {
+        const livingCells = this.countLivingCells();
+        const populationChange = livingCells - this.previousPopulation;
+        
+        // Calculate average population
+        const avgPopulation = this.populationHistory.length > 0 
+            ? Math.round(this.populationHistory.reduce((a, b) => a + b, 0) / this.populationHistory.length)
+            : 0;
+        
+        // Get recent birth and death rates
+        const recentBirths = this.birthHistory.length > 0 ? this.birthHistory[this.birthHistory.length - 1] : 0;
+        const recentDeaths = this.deathHistory.length > 0 ? this.deathHistory[this.deathHistory.length - 1] : 0;
+        
+        // Determine stability status
+        let stabilityStatus = 'New';
+        if (this.generation > 10) {
+            if (this.stabilityCounter > 3) {
+                stabilityStatus = 'Oscillating';
+            } else if (populationChange === 0 && recentBirths === 0 && recentDeaths === 0) {
+                stabilityStatus = 'Still Life';
+            } else if (Math.abs(populationChange) < 2) {
+                stabilityStatus = 'Stable';
+            } else {
+                stabilityStatus = 'Evolving';
+            }
+        }
+        
+        // Update DOM elements
+        document.getElementById('generationCount').textContent = this.generation;
+        document.getElementById('livingCells').textContent = livingCells;
+        document.getElementById('populationChange').textContent = 
+            populationChange > 0 ? `+${populationChange}` : populationChange;
+        document.getElementById('maxPopulation').textContent = this.maxPopulation;
+        document.getElementById('avgPopulation').textContent = avgPopulation;
+        document.getElementById('birthRate').textContent = recentBirths;
+        document.getElementById('deathRate').textContent = recentDeaths;
+        document.getElementById('stability').textContent = stabilityStatus;
+        
+        this.previousPopulation = livingCells;
+    }
+    
+    countLivingCells() {
+        let count = 0;
+        for (let row = 0; row < this.rows; row++) {
+            for (let col = 0; col < this.cols; col++) {
+                count += this.grid[row][col];
+            }
+        }
+        return count;
+    }
+    
+    reset() {
+        this.grid = this.createEmptyGrid();
+        this.generation = 0;
+        this.previousPopulation = 0;
+        
+        // Reset all statistics
+        this.history = [];
+        this.populationHistory = [];
+        this.birthHistory = [];
+        this.deathHistory = [];
+        this.maxPopulation = 0;
+        this.stabilityCounter = 0;
+        this.lastFewStates = [];
+        
+        this.saveState(); // Save initial empty state
+        this.updateStats();
+        this.updateCharts();
+        this.render();
+    }
+    
+    randomize() {
+        for (let row = 0; row < this.rows; row++) {
+            for (let col = 0; col < this.cols; col++) {
+                this.grid[row][col] = Math.random() < 0.3 ? 1 : 0;
+            }
+        }
+        this.generation = 0;
+        this.previousPopulation = 0;
+        this.updateStats();
+        this.render();
+    }
+    
+    start() {
+        this.isRunning = true;
+        this.gameLoop();
+    }
+    
+    stop() {
+        this.isRunning = false;
+    }
+    
+    step() {
+        this.nextGeneration();
+    }
+    
+    gameLoop(currentTime = 0) {
+        if (!this.isRunning) return;
+        
+        const deltaTime = currentTime - this.lastUpdate;
+        const targetInterval = 1000 / this.speed;
+        
+        if (deltaTime >= targetInterval) {
+            this.nextGeneration();
+            this.lastUpdate = currentTime;
+        }
+        
+        requestAnimationFrame((time) => this.gameLoop(time));
+    }
+    
+    setSpeed(speed) {
+        this.speed = speed;
+    }
+    
+    // Preset patterns
+    addPattern(pattern, startRow, startCol) {
+        for (let row = 0; row < pattern.length; row++) {
+            for (let col = 0; col < pattern[row].length; col++) {
+                const targetRow = startRow + row;
+                const targetCol = startCol + col;
+                
+                if (targetRow >= 0 && targetRow < this.rows && 
+                    targetCol >= 0 && targetCol < this.cols) {
+                    this.grid[targetRow][targetCol] = pattern[row][col];
+                }
+            }
+        }
+        this.render();
+        this.updateStats();
+    }
+    
+    // Import/Export functionality
+    exportPattern() {
+        const livingCells = [];
+        for (let row = 0; row < this.rows; row++) {
+            for (let col = 0; col < this.cols; col++) {
+                if (this.grid[row][col] === 1) {
+                    livingCells.push([row, col]);
+                }
+            }
+        }
+        
+        const patternData = {
+            name: `Game of Life Pattern - ${new Date().toISOString().split('T')[0]}`,
+            description: `Exported pattern with ${livingCells.length} living cells`,
+            gridSize: {
+                rows: this.rows,
+                cols: this.cols
+            },
+            generation: this.generation,
+            livingCells: livingCells,
+            statistics: {
+                maxPopulation: this.maxPopulation,
+                currentPopulation: this.countLivingCells(),
+                totalGenerations: this.generation
+            },
+            exportDate: new Date().toISOString(),
+            version: "1.0"
+        };
+        
+        return JSON.stringify(patternData, null, 2);
+    }
+    
+    importPattern(patternData) {
+        try {
+            const data = typeof patternData === 'string' ? JSON.parse(patternData) : patternData;
+            
+            // Validate the data structure
+            if (!data.livingCells || !Array.isArray(data.livingCells)) {
+                throw new Error('Invalid pattern data: missing or invalid livingCells array');
+            }
+            
+            // Reset the game
+            this.reset();
+            
+            // Import the living cells
+            for (const [row, col] of data.livingCells) {
+                if (row >= 0 && row < this.rows && col >= 0 && col < this.cols) {
+                    this.grid[row][col] = 1;
+                }
+            }
+            
+            // Update the display
+            this.saveState(); // Save the imported state
+            this.updateStats();
+            this.updateCharts();
+            this.render();
+            
+            return {
+                success: true,
+                message: `Successfully imported pattern with ${data.livingCells.length} living cells`,
+                data: data
+            };
+            
+        } catch (error) {
+            return {
+                success: false,
+                message: `Import failed: ${error.message}`,
+                error: error
+            };
+        }
+    }
+    
+    downloadPattern() {
+        const patternJson = this.exportPattern();
+        const blob = new Blob([patternJson], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `game-of-life-pattern-${Date.now()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+}
+
+// Preset patterns
+const patterns = {
+    glider: [
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 1, 1]
+    ],
+    
+    blinker: [
+        [1, 1, 1]
+    ],
+    
+    toad: [
+        [0, 1, 1, 1],
+        [1, 1, 1, 0]
+    ],
+    
+    beacon: [
+        [1, 1, 0, 0],
+        [1, 1, 0, 0],
+        [0, 0, 1, 1],
+        [0, 0, 1, 1]
+    ],
+    
+    pulsar: [
+        [0,0,1,1,1,0,0,0,1,1,1,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,0,0],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [0,0,1,1,1,0,0,0,1,1,1,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,1,1,1,0,0,0,1,1,1,0,0],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [0,0,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,1,1,1,0,0,0,1,1,1,0,0]
+    ],
+    
+    gosperGun: [
+        [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+        [0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+        [1,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        [1,1,0,0,0,0,0,0,0,0,1,0,0,0,1,0,1,1,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    ]
+};
+
+// Initialize game when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    const canvas = document.getElementById('gameCanvas');
+    const game = new GameOfLife(canvas);
+    
+    // Control buttons
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const stepBtn = document.getElementById('stepBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const randomBtn = document.getElementById('randomBtn');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+    
+    // Import/Export elements
+    const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const fileInput = document.getElementById('fileInput');
+    
+    // Modal elements
+    const introBtn = document.getElementById('introBtn');
+    const introModal = document.getElementById('introModal');
+    const closeModal = document.getElementById('closeModal');
+    
+    // Progress bar elements
+    const progressBar = document.getElementById('progressBar');
+    const progressThumb = document.getElementById('progressThumb');
+    let isDragging = false;
+    
+    // Music elements
+    const musicControl = document.getElementById('musicControl');
+    const musicIcon = document.getElementById('musicIcon');
+    const backgroundMusic = document.getElementById('backgroundMusic');
+    let isMusicPlaying = false;
+    
+    // Chart modal elements
+    const chartModal = document.getElementById('chartModal');
+    const chartModalTitle = document.getElementById('chartModalTitle');
+    const chartModalClose = document.getElementById('chartModalClose');
+    const chartModalCanvas = document.getElementById('chartModalCanvas');
+    const chartLegend = document.getElementById('chartLegend');
+    let currentModalChart = null;
+    
+    // Game control event listeners
+    playPauseBtn.addEventListener('click', () => {
+        if (game.isRunning) {
+            game.stop();
+            playPauseBtn.textContent = 'Play';
+            playPauseBtn.classList.remove('active');
+        } else {
+            game.start();
+            playPauseBtn.textContent = 'Pause';
+            playPauseBtn.classList.add('active');
+        }
+    });
+    
+    stepBtn.addEventListener('click', () => {
+        if (!game.isRunning) {
+            game.step();
+        }
+    });
+    
+    resetBtn.addEventListener('click', () => {
+        game.stop();
+        game.reset();
+        playPauseBtn.textContent = 'Play';
+        playPauseBtn.classList.remove('active');
+    });
+    
+    randomBtn.addEventListener('click', () => {
+        game.randomize();
+    });
+    
+    speedSlider.addEventListener('input', (e) => {
+        const speed = parseInt(e.target.value);
+        game.setSpeed(speed);
+        speedValue.textContent = speed;
+    });
+    
+    // Import/Export event listeners
+    exportBtn.addEventListener('click', () => {
+        game.downloadPattern();
+        showNotification('Pattern exported successfully!', 'success');
+    });
+    
+    importBtn.addEventListener('click', () => {
+        fileInput.click();
+    });
+    
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const result = game.importPattern(event.target.result);
+                if (result.success) {
+                    showNotification(result.message, 'success');
+                } else {
+                    showNotification(result.message, 'error');
+                }
+            } catch (error) {
+                showNotification(`Import failed: ${error.message}`, 'error');
+            }
+        };
+        reader.readAsText(file);
+        
+        // Reset file input so the same file can be selected again
+        e.target.value = '';
+    });
+    
+    // Modal event listeners
+    introBtn.addEventListener('click', () => {
+        introModal.classList.add('active');
+    });
+    
+    closeModal.addEventListener('click', () => {
+        introModal.classList.remove('active');
+    });
+    
+    introModal.addEventListener('click', (e) => {
+        if (e.target === introModal) {
+            introModal.classList.remove('active');
+        }
+    });
+    
+    // Ambient music system using Web Audio API
+    let audioContext = null;
+    let oscillators = [];
+    let masterGain = null;
+    
+    function createAmbientMusic() {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            masterGain = audioContext.createGain();
+            masterGain.connect(audioContext.destination);
+            masterGain.gain.setValueAtTime(0.05, audioContext.currentTime);
+            
+            // Create multiple oscillators for rich ambient sound
+            const frequencies = [110, 165, 220, 330]; // A2, E3, A3, E4
+            
+            frequencies.forEach((freq, index) => {
+                const oscillator = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                
+                oscillator.connect(gain);
+                gain.connect(masterGain);
+                
+                oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+                oscillator.type = 'sine';
+                gain.gain.setValueAtTime(0.3 / frequencies.length, audioContext.currentTime);
+                
+                // Add subtle frequency modulation for organic feel
+                const lfo = audioContext.createOscillator();
+                const lfoGain = audioContext.createGain();
+                lfo.connect(lfoGain);
+                lfoGain.connect(oscillator.frequency);
+                lfo.frequency.setValueAtTime(0.1 + index * 0.05, audioContext.currentTime);
+                lfoGain.gain.setValueAtTime(0.5, audioContext.currentTime);
+                
+                oscillator.start();
+                lfo.start();
+                
+                oscillators.push({ oscillator, gain, lfo });
+            });
+        }
+    }
+    
+    function stopAmbientMusic() {
+        if (oscillators.length > 0) {
+            oscillators.forEach(({ oscillator, lfo }) => {
+                oscillator.stop();
+                lfo.stop();
+            });
+            oscillators = [];
+        }
+    }
+    
+    // Music control - Updated to use MP3 file
+    musicControl.addEventListener('click', async () => {
+        if (isMusicPlaying) {
+            backgroundMusic.pause();
+            musicIcon.textContent = '♪';
+            musicControl.classList.remove('playing');
+            isMusicPlaying = false;
+        } else {
+            try {
+                await backgroundMusic.play();
+                musicIcon.textContent = '♫';
+                musicControl.classList.add('playing');
+                isMusicPlaying = true;
+            } catch (error) {
+                console.log('Audio playback failed:', error);
+                // Fallback to Web Audio API if MP3 fails
+                try {
+                    createAmbientMusic();
+                    
+                    if (audioContext && audioContext.state === 'suspended') {
+                        await audioContext.resume();
+                    }
+                    
+                    musicIcon.textContent = '♫';
+                    musicControl.classList.add('playing');
+                    isMusicPlaying = true;
+                } catch (fallbackError) {
+                    console.log('Fallback audio also failed');
+                }
+            }
+        }
+    });
+    
+    // Progress bar interaction for time travel
+    function handleProgressBarClick(e) {
+        const rect = progressBar.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const percentage = Math.max(0, Math.min(1, x / rect.width));
+        const targetGen = Math.floor(percentage * (game.history.length - 1));
+        game.goToGeneration(targetGen);
+    }
+    
+    function handleProgressBarDrag(e) {
+        if (!isDragging) return;
+        
+        const rect = progressBar.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const percentage = Math.max(0, Math.min(1, x / rect.width));
+        const targetGen = Math.floor(percentage * (game.history.length - 1));
+        game.goToGeneration(targetGen);
+    }
+    
+    // Progress bar event listeners
+    progressBar.addEventListener('click', handleProgressBarClick);
+    
+    progressThumb.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', handleProgressBarDrag);
+    
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+    
+    // Touch events for mobile
+    progressBar.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = progressBar.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const percentage = Math.max(0, Math.min(1, x / rect.width));
+        const targetGen = Math.floor(percentage * (game.history.length - 1));
+        game.goToGeneration(targetGen);
+    });
+    
+    progressThumb.addEventListener('touchstart', (e) => {
+        isDragging = true;
+        e.preventDefault();
+    });
+    
+    document.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = progressBar.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const percentage = Math.max(0, Math.min(1, x / rect.width));
+        const targetGen = Math.floor(percentage * (game.history.length - 1));
+        game.goToGeneration(targetGen);
+    });
+    
+    document.addEventListener('touchend', () => {
+        isDragging = false;
+    });
+    
+    // Chart fullscreen functionality
+    document.querySelectorAll('.chart-container').forEach(container => {
+        container.addEventListener('click', (e) => {
+            if (e.target.classList.contains('chart-expand-btn')) {
+                const chartType = container.getAttribute('data-chart');
+                openChartModal(chartType);
+            }
+        });
+    });
+    
+    chartModalClose.addEventListener('click', () => {
+        chartModal.classList.remove('active');
+        currentModalChart = null;
+    });
+    
+    chartModal.addEventListener('click', (e) => {
+        if (e.target === chartModal) {
+            chartModal.classList.remove('active');
+            currentModalChart = null;
+        }
+    });
+    
+    function openChartModal(chartType) {
+        currentModalChart = chartType;
+        
+        if (chartType === 'population') {
+            chartModalTitle.textContent = 'Population Over Time';
+            setupChartLegend([
+                { color: '#00d9ff', label: 'Population' },
+                { color: '#e94560', label: 'Current Generation' }
+            ]);
+        } else if (chartType === 'rate') {
+            chartModalTitle.textContent = 'Birth/Death Rates Over Time';
+            setupChartLegend([
+                { color: '#00ff88', label: 'Birth Rate' },
+                { color: '#ff6b6b', label: 'Death Rate' }
+            ]);
+        }
+        
+        chartModal.classList.add('active');
+        
+        // Resize modal canvas and redraw
+        setTimeout(() => {
+            resizeModalChart();
+            drawModalChart();
+        }, 100);
+    }
+    
+    function setupChartLegend(items) {
+        chartLegend.innerHTML = items.map(item => 
+            `<div class="legend-item">
+                <div class="legend-color" style="background-color: ${item.color}"></div>
+                <span>${item.label}</span>
+            </div>`
+        ).join('');
+    }
+    
+    function resizeModalChart() {
+        const container = chartModalCanvas.parentElement;
+        const rect = container.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        
+        chartModalCanvas.style.width = rect.width + 'px';
+        chartModalCanvas.style.height = rect.height + 'px';
+        
+        chartModalCanvas.width = rect.width * dpr;
+        chartModalCanvas.height = rect.height * dpr;
+        
+        const ctx = chartModalCanvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+    }
+    
+    function drawModalChart() {
+        if (!currentModalChart) return;
+        
+        if (currentModalChart === 'population') {
+            drawFullscreenPopulationChart();
+        } else if (currentModalChart === 'rate') {
+            drawFullscreenRateChart();
+        }
+    }
+    
+    // Preset pattern buttons
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const patternName = btn.getAttribute('data-preset');
+            const pattern = patterns[patternName];
+            
+            if (pattern) {
+                // Place pattern in center of grid
+                const startRow = Math.floor((game.rows - pattern.length) / 2);
+                const startCol = Math.floor((game.cols - pattern[0].length) / 2);
+                
+                game.reset();
+                game.addPattern(pattern, startRow, startCol);
+            }
+        });
+    });
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        switch(e.key) {
+            case ' ':
+                e.preventDefault();
+                playPauseBtn.click();
+                break;
+            case 'r':
+                resetBtn.click();
+                break;
+            case 's':
+                stepBtn.click();
+                break;
+            case 'g':
+                randomBtn.click();
+                break;
+            case 'Escape':
+                if (introModal.classList.contains('active')) {
+                    introModal.classList.remove('active');
+                }
+                if (chartModal.classList.contains('active')) {
+                    chartModal.classList.remove('active');
+                    currentModalChart = null;
+                }
+                break;
+            case 'e':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    exportBtn.click();
+                }
+                break;
+            case 'i':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    importBtn.click();
+                }
+                break;
+        }
+    });
+    
+    // Show introduction modal on first visit
+    if (!localStorage.getItem('gameOfLifeVisited')) {
+        setTimeout(() => {
+            introModal.classList.add('active');
+            localStorage.setItem('gameOfLifeVisited', 'true');
+        }, 1000);
+    }
+    
+    // Handle window resize to keep charts properly sized
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            game.resizeCharts();
+            game.updateCharts();
+        }, 250);
+    });
+    
+    // Fullscreen chart drawing functions with axes and labels
+    function drawFullscreenPopulationChart() {
+        const canvas = chartModalCanvas;
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        
+        // Margins for axes
+        const margin = { top: 40, right: 40, bottom: 60, left: 80 };
+        const chartWidth = width - margin.left - margin.right;
+        const chartHeight = height - margin.top - margin.bottom;
+        
+        // Clear canvas
+        ctx.fillStyle = '#0f0f23';
+        ctx.fillRect(0, 0, width, height);
+        
+        if (game.populationHistory.length < 2) return;
+        
+        const maxPop = Math.max(...game.populationHistory);
+        const minPop = Math.min(...game.populationHistory);
+        const range = maxPop - minPop || 1;
+        const maxGen = game.populationHistory.length - 1;
+        
+        // Draw axes
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Y-axis
+        ctx.moveTo(margin.left, margin.top);
+        ctx.lineTo(margin.left, height - margin.bottom);
+        // X-axis
+        ctx.lineTo(width - margin.right, height - margin.bottom);
+        ctx.stroke();
+        
+        // Draw grid lines and labels
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = '12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        
+        // X-axis labels (generations)
+        const xSteps = Math.min(10, maxGen);
+        for (let i = 0; i <= xSteps; i++) {
+            const gen = Math.round((maxGen / xSteps) * i);
+            const x = margin.left + (chartWidth / xSteps) * i;
+            
+            // Grid line
+            ctx.beginPath();
+            ctx.moveTo(x, margin.top);
+            ctx.lineTo(x, height - margin.bottom);
+            ctx.stroke();
+            
+            // Label
+            ctx.fillText(gen.toString(), x, height - margin.bottom + 20);
+        }
+        
+        // Y-axis labels (population)
+        ctx.textAlign = 'right';
+        const ySteps = 8;
+        for (let i = 0; i <= ySteps; i++) {
+            const value = minPop + (range / ySteps) * i;
+            const y = height - margin.bottom - (chartHeight / ySteps) * i;
+            
+            // Grid line
+            ctx.beginPath();
+            ctx.moveTo(margin.left, y);
+            ctx.lineTo(width - margin.right, y);
+            ctx.stroke();
+            
+            // Label
+            ctx.fillText(Math.round(value).toString(), margin.left - 10, y + 4);
+        }
+        
+        // Axis labels
+        ctx.textAlign = 'center';
+        ctx.font = '14px Inter, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillText('Generation', width / 2, height - 10);
+        
+        ctx.save();
+        ctx.translate(20, height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Population', 0, 0);
+        ctx.restore();
+        
+        // Draw population line
+        ctx.strokeStyle = '#00d9ff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        
+        for (let i = 0; i < game.populationHistory.length; i++) {
+            const x = margin.left + (chartWidth / maxGen) * i;
+            const normalizedValue = (game.populationHistory[i] - minPop) / range;
+            const y = height - margin.bottom - (normalizedValue * chartHeight);
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        
+        ctx.stroke();
+        
+        // Draw current generation marker
+        if (game.generation < game.populationHistory.length) {
+            const x = margin.left + (chartWidth / maxGen) * game.generation;
+            const normalizedValue = (game.populationHistory[game.generation] - minPop) / range;
+            const y = height - margin.bottom - (normalizedValue * chartHeight);
+            
+            ctx.fillStyle = '#e94560';
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    function drawFullscreenRateChart() {
+        const canvas = chartModalCanvas;
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        
+        // Margins for axes
+        const margin = { top: 40, right: 40, bottom: 60, left: 80 };
+        const chartWidth = width - margin.left - margin.right;
+        const chartHeight = height - margin.top - margin.bottom;
+        
+        // Clear canvas
+        ctx.fillStyle = '#0f0f23';
+        ctx.fillRect(0, 0, width, height);
+        
+        if (game.birthHistory.length < 2) return;
+        
+        const maxRate = Math.max(...game.birthHistory, ...game.deathHistory);
+        const maxGen = game.birthHistory.length - 1;
+        
+        // Draw axes
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Y-axis
+        ctx.moveTo(margin.left, margin.top);
+        ctx.lineTo(margin.left, height - margin.bottom);
+        // X-axis
+        ctx.lineTo(width - margin.right, height - margin.bottom);
+        ctx.stroke();
+        
+        // Draw grid lines and labels
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = '12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        
+        // X-axis labels (generations)
+        const xSteps = Math.min(10, maxGen);
+        for (let i = 0; i <= xSteps; i++) {
+            const gen = Math.round((maxGen / xSteps) * i);
+            const x = margin.left + (chartWidth / xSteps) * i;
+            
+            // Grid line
+            ctx.beginPath();
+            ctx.moveTo(x, margin.top);
+            ctx.lineTo(x, height - margin.bottom);
+            ctx.stroke();
+            
+            // Label
+            ctx.fillText(gen.toString(), x, height - margin.bottom + 20);
+        }
+        
+        // Y-axis labels (rates)
+        ctx.textAlign = 'right';
+        const ySteps = 8;
+        for (let i = 0; i <= ySteps; i++) {
+            const value = (maxRate / ySteps) * i;
+            const y = height - margin.bottom - (chartHeight / ySteps) * i;
+            
+            // Grid line
+            ctx.beginPath();
+            ctx.moveTo(margin.left, y);
+            ctx.lineTo(width - margin.right, y);
+            ctx.stroke();
+            
+            // Label
+            ctx.fillText(Math.round(value).toString(), margin.left - 10, y + 4);
+        }
+        
+        // Axis labels
+        ctx.textAlign = 'center';
+        ctx.font = '14px Inter, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillText('Generation', width / 2, height - 10);
+        
+        ctx.save();
+        ctx.translate(20, height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Rate (Cells/Generation)', 0, 0);
+        ctx.restore();
+        
+        // Draw birth rate line
+        ctx.strokeStyle = '#00ff88';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        
+        for (let i = 0; i < game.birthHistory.length; i++) {
+            const x = margin.left + (chartWidth / maxGen) * i;
+            const y = height - margin.bottom - ((game.birthHistory[i] / maxRate) * chartHeight);
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+        
+        // Draw death rate line
+        ctx.strokeStyle = '#ff6b6b';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        
+        for (let i = 0; i < game.deathHistory.length; i++) {
+            const x = margin.left + (chartWidth / maxGen) * i;
+            const y = height - margin.bottom - ((game.deathHistory[i] / maxRate) * chartHeight);
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+    }
+    
+    // Notification system
+    function showNotification(message, type = 'info', duration = 3000) {
+        // Remove existing notifications
+        const existingNotifications = document.querySelectorAll('.notification');
+        existingNotifications.forEach(notification => notification.remove());
+        
+        // Create new notification
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        // Show notification
+        setTimeout(() => {
+            notification.classList.add('show');
+        }, 100);
+        
+        // Hide and remove notification
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, duration);
+    }
+    
+    // Initial chart setup after a short delay to ensure DOM is ready
+    setTimeout(() => {
+        game.resizeCharts();
+        game.updateCharts();
+    }, 100);
+});
