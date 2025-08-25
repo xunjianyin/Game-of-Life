@@ -1918,35 +1918,89 @@ document.addEventListener('DOMContentLoaded', () => {
         }, duration);
     }
     
+    // Settings modal functionality - Set up immediately
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const closeSettings = document.getElementById('closeSettings');
+    
+    if (settingsBtn && settingsModal && closeSettings) {
+        settingsBtn.addEventListener('click', () => {
+            settingsModal.classList.add('active');
+            if (game && game.playSound) {
+                game.playSound(880, 0.1, 'sine');
+            }
+        });
+        
+        closeSettings.addEventListener('click', () => {
+            settingsModal.classList.remove('active');
+        });
+        
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) {
+                settingsModal.classList.remove('active');
+            }
+        });
+    } else {
+        console.error('Settings elements not found:', { settingsBtn, settingsModal, closeSettings });
+    }
+
+    // Fullscreen mode functionality - Set up immediately
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    let isFullscreen = false;
+    
+    if (fullscreenBtn) {
+        fullscreenBtn.addEventListener('click', () => {
+            isFullscreen = !isFullscreen;
+            
+            if (isFullscreen) {
+                document.body.classList.add('fullscreen');
+                fullscreenBtn.textContent = 'Exit Fullscreen';
+                if (game && game.playSound) {
+                    game.playSound(1320, 0.15, 'sawtooth');
+                }
+            } else {
+                document.body.classList.remove('fullscreen');
+                fullscreenBtn.textContent = 'Fullscreen';
+                if (game && game.playSound) {
+                    game.playSound(880, 0.15, 'sawtooth');
+                }
+            }
+            
+            // Resize canvas for fullscreen
+            setTimeout(() => {
+                if (game && game.render) {
+                    game.render();
+                }
+            }, 100);
+        });
+        
+        // ESC key to exit fullscreen
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isFullscreen) {
+                isFullscreen = false;
+                document.body.classList.remove('fullscreen');
+                fullscreenBtn.textContent = 'Fullscreen';
+                setTimeout(() => {
+                    if (game && game.render) {
+                        game.render();
+                    }
+                }, 100);
+            }
+        });
+    } else {
+        console.error('Fullscreen button not found');
+    }
+
     // Initial chart setup after a short delay to ensure DOM is ready
     setTimeout(() => {
         game.resizeCharts();
         game.updateCharts();
         
-        // Initialize settings functionality after game is ready
-        initializeSettings();
+        // Initialize other settings functionality after game is ready
+        initializeAdvancedSettings();
     }, 100);
     
-    function initializeSettings() {
-        // Settings modal functionality
-        const settingsBtn = document.getElementById('settingsBtn');
-        const settingsModal = document.getElementById('settingsModal');
-        const closeSettings = document.getElementById('closeSettings');
-        
-        settingsBtn.addEventListener('click', () => {
-            settingsModal.style.display = 'flex';
-            game.playSound(880, 0.1, 'sine');
-        });
-        
-        closeSettings.addEventListener('click', () => {
-            settingsModal.style.display = 'none';
-        });
-        
-        settingsModal.addEventListener('click', (e) => {
-            if (e.target === settingsModal) {
-                settingsModal.style.display = 'none';
-            }
-        });
+    function initializeAdvancedSettings() {
 
         // Theme selection
         document.querySelectorAll('.theme-btn').forEach(btn => {
@@ -2008,39 +2062,5 @@ document.addEventListener('DOMContentLoaded', () => {
             game.playSound(440, 0.1, 'sine');
         });
 
-        // Fullscreen mode
-        const fullscreenBtn = document.getElementById('fullscreenBtn');
-        let isFullscreen = false;
-        
-        fullscreenBtn.addEventListener('click', () => {
-            isFullscreen = !isFullscreen;
-            
-            if (isFullscreen) {
-                document.body.classList.add('fullscreen');
-                fullscreenBtn.textContent = 'Exit Fullscreen';
-                game.playSound(1320, 0.15, 'sawtooth');
-            } else {
-                document.body.classList.remove('fullscreen');
-                fullscreenBtn.textContent = 'Fullscreen';
-                game.playSound(880, 0.15, 'sawtooth');
-            }
-            
-            // Resize canvas for fullscreen
-            setTimeout(() => {
-                game.render();
-            }, 100);
-        });
-        
-        // ESC key to exit fullscreen (separate listener to avoid conflicts)
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && isFullscreen) {
-                isFullscreen = false;
-                document.body.classList.remove('fullscreen');
-                fullscreenBtn.textContent = 'Fullscreen';
-                setTimeout(() => {
-                    game.render();
-                }, 100);
-            }
-        });
     }
 });
