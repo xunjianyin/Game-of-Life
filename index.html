@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Conway's Game of Life</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -271,6 +271,7 @@
             border-radius: 2px;
             outline: none;
             -webkit-appearance: none;
+			appearance: none;
             cursor: pointer;
         }
 
@@ -1101,45 +1102,345 @@
         }
 
         @media (max-width: 768px) {
-            .header h1 {
-                font-size: 2.2rem;
+            .game-container {
+                padding: 12px;
+                margin: 8px;
+                border-radius: 12px;
             }
             
-            .game-container {
-                padding: 24px;
+            .header {
+                padding: 20px 12px;
+                text-align: center;
+            }
+            
+            .header h1 {
+                font-size: 1.8rem;
+                margin-bottom: 8px;
+            }
+            
+            .header p {
+                font-size: 0.85rem;
+                margin-bottom: 16px;
+            }
+            
+            .header-controls {
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 8px;
+                justify-content: center;
+            }
+            
+            .header-controls button {
+                flex: 1;
+                min-width: 120px;
+                max-width: 160px;
+                font-size: 13px;
+                padding: 10px 16px;
+            }
+            
+            .main-content {
+                gap: 16px;
+                padding: 0;
             }
             
             .controls {
                 gap: 12px;
+                align-items: stretch;
+            }
+            
+            .control-group {
+                justify-content: center;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            
+            .control-group button {
+                flex: 1;
+                min-width: 70px;
+                padding: 10px 12px;
+                font-size: 13px;
+            }
+            
+            .speed-control {
+                margin: 12px 0;
+            }
+            
+            .grid-controls {
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .grid-input-group {
+                flex-direction: row;
+                gap: 8px;
+                align-items: center;
                 flex-wrap: wrap;
             }
             
-            button {
-                padding: 10px 20px;
-                font-size: 13px;
+            .grid-input {
+                flex: 1;
+                min-width: 60px;
+                max-width: 80px;
             }
-
-            .stats-panel,
-            .charts-panel {
+            
+            .grid-apply {
+                flex-shrink: 0;
+                min-width: 80px;
+            }
+            
+            .presets {
+                justify-content: flex-start;
+                overflow-x: auto;
+                padding: 4px 0 12px 0;
+                gap: 8px;
+            }
+            
+            .preset-item {
+                min-width: 70px;
+                padding: 8px 6px;
+            }
+            
+            .preset-thumbnail {
+                width: 32px;
+                height: 32px;
+            }
+            
+            .preset-name {
+                font-size: 10px;
+            }
+            
+            #gameCanvas {
+                max-width: 100%;
+                height: auto;
+            }
+            
+            .stats-panel {
+                padding: 12px;
+                margin-bottom: 16px;
                 grid-template-columns: 1fr;
             }
-
+            
+            .stat {
+                padding: 8px 12px;
+                margin: 4px 0;
+            }
+            
+            .stat-label {
+                font-size: 11px;
+            }
+            
+            .stat-value {
+                font-size: 14px;
+            }
+            
+            .charts-panel {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+            
+            .chart-container {
+                height: 140px;
+            }
+            
+            .chart-container h4 {
+                font-size: 12px;
+                padding: 8px 12px;
+            }
+            
+            .time-travel {
+                margin: 16px 0;
+            }
+            
+            .progress-container {
+                height: 6px;
+                margin: 8px 0;
+            }
+            
+            .progress-thumb {
+                width: 16px;
+                height: 16px;
+            }
+            
+            .generation-labels {
+                font-size: 10px;
+            }
+            
+            .file-controls {
+                flex-direction: row;
+                gap: 8px;
+                margin-top: 16px;
+                flex-wrap: wrap;
+            }
+            
+            .file-controls button {
+                flex: 1;
+                min-width: 120px;
+                padding: 10px 16px;
+                font-size: 13px;
+            }
+            
             .modal-content {
-                padding: 24px;
-                margin: 20px;
+                padding: 20px;
+                margin: 16px;
+                max-width: calc(100vw - 32px);
+                max-height: calc(100vh - 32px);
+            }
+            
+            .settings-section {
+                margin-bottom: 20px;
+                padding-bottom: 16px;
+            }
+            
+            .theme-selector {
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+            }
+            
+            .theme-btn {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+            
+            .color-controls {
+                gap: 10px;
+            }
+            
+            .color-control {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 6px;
+            }
+            
+            .color-control input[type="color"] {
+                width: 100%;
+                height: 36px;
+            }
+            
+            .audio-controls {
+                gap: 12px;
+            }
+            
+            .volume-control {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            
+            .volume-control input[type="range"] {
+                width: 100%;
             }
 
             .music-control {
-                bottom: 16px;
-                right: 16px;
-                width: 48px;
-                height: 48px;
+                bottom: 12px;
+                right: 12px;
+                width: 44px;
+                height: 44px;
             }
+            
+            /* Fullscreen mode adjustments for mobile */
+            body.fullscreen .game-container {
+                padding: 8px;
+            }
+            
+            body.fullscreen #gameCanvas {
+                width: 100vw;
+                height: calc(100vh - 16px);
+                object-fit: contain;
+            }
+        }
 
-            #gameCanvas {
-                width: 100%;
-                max-width: 400px;
-                height: auto;
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
+            .header p {
+                font-size: 0.8rem;
+            }
+            
+            .header-controls {
+                gap: 6px;
+            }
+            
+            .header-controls button {
+                font-size: 12px;
+                padding: 8px 12px;
+                min-width: 100px;
+                max-width: 140px;
+            }
+            
+            .game-container {
+                margin: 4px;
+                padding: 8px;
+            }
+            
+            .control-group button {
+                font-size: 12px;
+                padding: 8px 10px;
+                min-width: 65px;
+            }
+            
+            .file-controls button {
+                min-width: 100px;
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+            
+            .preset-item {
+                min-width: 60px;
+                padding: 6px 4px;
+            }
+            
+            .preset-thumbnail {
+                width: 28px;
+                height: 28px;
+            }
+            
+            .preset-name {
+                font-size: 9px;
+            }
+            
+            .stats-panel {
+                padding: 8px;
+            }
+            
+            .stat {
+                padding: 6px 8px;
+                margin: 2px 0;
+            }
+            
+            .stat-label {
+                font-size: 10px;
+            }
+            
+            .stat-value {
+                font-size: 12px;
+            }
+            
+            .chart-container {
+                height: 120px;
+            }
+            
+            .chart-container h4 {
+                font-size: 11px;
+                padding: 6px 8px;
+            }
+            
+            .modal-content {
+                padding: 16px;
+                margin: 8px;
+            }
+            
+            .settings-section h3 {
+                font-size: 14px;
+            }
+            
+            .theme-btn {
+                padding: 6px 8px;
+                font-size: 11px;
             }
         }
     </style>

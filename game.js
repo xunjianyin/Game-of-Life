@@ -44,6 +44,7 @@ class GameOfLife {
         
         this.setupEventListeners();
         this.initializeCharts();
+        this.setupMobileOptimizations();
         
         // Initialize entropy history with first calculation
         const initialEntropy = this.calculateEntropy();
@@ -358,6 +359,54 @@ class GameOfLife {
         
         this.render();
         this.updateStats();
+    }
+    
+    setupMobileOptimizations() {
+        // Adjust canvas size for mobile devices
+        this.optimizeCanvasForDevice();
+        
+        // Listen for orientation changes
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => {
+                this.optimizeCanvasForDevice();
+                this.render();
+            }, 100);
+        });
+        
+        // Listen for window resize
+        window.addEventListener('resize', () => {
+            this.optimizeCanvasForDevice();
+            this.render();
+        });
+    }
+    
+    optimizeCanvasForDevice() {
+        const isMobile = window.innerWidth <= 768;
+        const container = this.canvas.parentElement;
+        const containerRect = container.getBoundingClientRect();
+        
+        if (isMobile) {
+            // On mobile, make canvas responsive
+            const maxWidth = Math.min(containerRect.width - 20, window.innerWidth - 40);
+            const maxHeight = Math.min(window.innerHeight * 0.6, maxWidth);
+            
+            // Maintain aspect ratio
+            const aspectRatio = this.canvas.width / this.canvas.height;
+            let newWidth = maxWidth;
+            let newHeight = newWidth / aspectRatio;
+            
+            if (newHeight > maxHeight) {
+                newHeight = maxHeight;
+                newWidth = newHeight * aspectRatio;
+            }
+            
+            this.canvas.style.width = newWidth + 'px';
+            this.canvas.style.height = newHeight + 'px';
+        } else {
+            // On desktop, use default sizing
+            this.canvas.style.width = '';
+            this.canvas.style.height = '';
+        }
     }
     
     initializeSounds() {
