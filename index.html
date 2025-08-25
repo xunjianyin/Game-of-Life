@@ -318,25 +318,69 @@
         .presets {
             display: flex;
             gap: 12px;
-            flex-wrap: wrap;
             justify-content: center;
             margin-bottom: 24px;
+            overflow-x: auto;
+            padding: 4px 0;
+            scrollbar-width: thin;
+            scrollbar-color: var(--accent-primary) var(--bg-tertiary);
         }
 
-        .preset-btn {
-            font-size: 12px;
-            padding: 8px 16px;
-            background: transparent;
-            border: 1px solid var(--border-primary);
-            color: var(--text-secondary);
-            border-radius: 8px;
-            transition: all 0.2s ease;
+        .presets::-webkit-scrollbar {
+            height: 6px;
         }
 
-        .preset-btn:hover {
+        .presets::-webkit-scrollbar-track {
             background: var(--bg-tertiary);
+            border-radius: 3px;
+        }
+
+        .presets::-webkit-scrollbar-thumb {
+            background: var(--accent-primary);
+            border-radius: 3px;
+        }
+
+        .presets::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-secondary);
+        }
+
+        .preset-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 80px;
+            flex-shrink: 0;
+        }
+
+        .preset-item:hover {
+            background: var(--bg-secondary);
+            border-color: var(--accent-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(233, 69, 96, 0.2);
+        }
+
+        .preset-thumbnail {
+            border: 1px solid var(--border-secondary);
+            border-radius: 4px;
+            background: var(--cell-dead);
+        }
+
+        .preset-name {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .preset-item:hover .preset-name {
             color: var(--text-primary);
-            border-color: var(--accent-secondary);
         }
 
         .stats-panel {
@@ -785,6 +829,227 @@
             background: linear-gradient(135deg, #00d9ff, #0099cc);
         }
 
+        /* Settings Modal Styles */
+        .settings-section {
+            margin-bottom: 24px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-secondary);
+        }
+
+        .settings-section:last-child {
+            border-bottom: none;
+        }
+
+        .settings-section h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .theme-selector {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .theme-btn {
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            color: var(--text-secondary);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+
+        .theme-btn:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .theme-btn.active {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: white;
+        }
+
+        .color-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .color-control {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .color-control label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .color-control input[type="color"] {
+            width: 40px;
+            height: 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .audio-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .toggle-label input[type="checkbox"] {
+            display: none;
+        }
+
+        .toggle-slider {
+            width: 40px;
+            height: 20px;
+            background: var(--border-primary);
+            border-radius: 10px;
+            position: relative;
+            transition: background 0.3s ease;
+        }
+
+        .toggle-slider::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s ease;
+        }
+
+        .toggle-label input[type="checkbox"]:checked + .toggle-slider {
+            background: var(--accent-primary);
+        }
+
+        .toggle-label input[type="checkbox"]:checked + .toggle-slider::after {
+            transform: translateX(20px);
+        }
+
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .volume-control label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .volume-control input[type="range"] {
+            flex: 1;
+        }
+
+        /* Fullscreen Mode */
+        body.fullscreen {
+            overflow: hidden;
+        }
+
+        body.fullscreen .header,
+        body.fullscreen .left-panel,
+        body.fullscreen .right-panel,
+        body.fullscreen .controls,
+        body.fullscreen .presets,
+        body.fullscreen .file-controls {
+            display: none !important;
+        }
+
+        body.fullscreen .game-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            max-width: none;
+            border-radius: 0;
+            padding: 0;
+            background: var(--bg-primary);
+        }
+
+        body.fullscreen .main-content {
+            grid-template-columns: 1fr;
+            height: 100vh;
+            padding: 0;
+        }
+
+        body.fullscreen .center-panel {
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+        }
+
+        body.fullscreen .canvas-container {
+            margin: 0;
+        }
+
+        body.fullscreen #gameCanvas {
+            max-width: 100vw;
+            max-height: 100vh;
+        }
+
+        /* Theme Variations */
+        body.theme-neon {
+            --bg-primary: #000011;
+            --bg-secondary: #001122;
+            --bg-tertiary: #002233;
+            --accent-primary: #ff0080;
+            --accent-secondary: #00ff80;
+            --cell-alive: #00ff80;
+            --cell-dead: #000011;
+            --text-primary: #ffffff;
+            --text-secondary: #cccccc;
+        }
+
+        body.theme-retro {
+            --bg-primary: #2d1b69;
+            --bg-secondary: #3c2a78;
+            --bg-tertiary: #4b3987;
+            --accent-primary: #ff6b35;
+            --accent-secondary: #f7931e;
+            --cell-alive: #f7931e;
+            --cell-dead: #2d1b69;
+            --text-primary: #ffffff;
+            --text-secondary: #dddddd;
+        }
+
+        body.theme-minimalist {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --bg-tertiary: #e9ecef;
+            --accent-primary: #6c757d;
+            --accent-secondary: #495057;
+            --cell-alive: #212529;
+            --cell-dead: #ffffff;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --border-primary: rgba(0, 0, 0, 0.1);
+            --border-secondary: rgba(0, 0, 0, 0.05);
+        }
+
         @media (max-width: 1400px) {
             .main-content {
                 grid-template-columns: 260px 1fr 280px;
@@ -885,6 +1150,8 @@
         <p>A cellular automaton where simple rules create complex, evolving patterns. Click cells to toggle them, then watch life unfold!</p>
         <div class="header-controls">
             <button id="introBtn" class="btn-secondary">Introduction</button>
+            <button id="settingsBtn" class="btn-secondary">Settings</button>
+            <button id="fullscreenBtn" class="btn-secondary">Fullscreen</button>
         </div>
     </div>
 
@@ -978,12 +1245,30 @@
                 </div>
 
                 <div class="presets">
-                    <button class="preset-btn" data-preset="glider">Glider</button>
-                    <button class="preset-btn" data-preset="blinker">Blinker</button>
-                    <button class="preset-btn" data-preset="toad">Toad</button>
-                    <button class="preset-btn" data-preset="beacon">Beacon</button>
-                    <button class="preset-btn" data-preset="pulsar">Pulsar</button>
-                    <button class="preset-btn" data-preset="gosperGun">Gosper Gun</button>
+                    <div class="preset-item" data-preset="glider">
+                        <canvas class="preset-thumbnail" width="40" height="40"></canvas>
+                        <span class="preset-name">Glider</span>
+                    </div>
+                    <div class="preset-item" data-preset="blinker">
+                        <canvas class="preset-thumbnail" width="40" height="40"></canvas>
+                        <span class="preset-name">Blinker</span>
+                    </div>
+                    <div class="preset-item" data-preset="toad">
+                        <canvas class="preset-thumbnail" width="40" height="40"></canvas>
+                        <span class="preset-name">Toad</span>
+                    </div>
+                    <div class="preset-item" data-preset="beacon">
+                        <canvas class="preset-thumbnail" width="40" height="40"></canvas>
+                        <span class="preset-name">Beacon</span>
+                    </div>
+                    <div class="preset-item" data-preset="pulsar">
+                        <canvas class="preset-thumbnail" width="40" height="40"></canvas>
+                        <span class="preset-name">Pulsar</span>
+                    </div>
+                    <div class="preset-item" data-preset="gosperGun">
+                        <canvas class="preset-thumbnail" width="40" height="40"></canvas>
+                        <span class="preset-name">Gosper Gun</span>
+                    </div>
                 </div>
 
                 <div class="file-controls">
@@ -1089,6 +1374,58 @@
             <div class="chart-modal-body">
                 <canvas class="chart-modal-canvas" id="chartModalCanvas"></canvas>
                 <div class="chart-legend" id="chartLegend"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" id="closeSettings">×</button>
+            <h2>Settings</h2>
+            
+            <div class="settings-section">
+                <h3>Visual Theme</h3>
+                <div class="theme-selector">
+                    <button class="theme-btn active" data-theme="elegant">Elegant</button>
+                    <button class="theme-btn" data-theme="neon">Neon</button>
+                    <button class="theme-btn" data-theme="retro">Retro</button>
+                    <button class="theme-btn" data-theme="minimalist">Minimalist</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Cell Colors</h3>
+                <div class="color-controls">
+                    <div class="color-control">
+                        <label for="aliveColor">Living Cells:</label>
+                        <input type="color" id="aliveColor" value="#00d9ff">
+                    </div>
+                    <div class="color-control">
+                        <label for="deadColor">Dead Cells:</label>
+                        <input type="color" id="deadColor" value="#0f0f23">
+                    </div>
+                    <div class="color-control">
+                        <label for="gridColor">Grid Lines:</label>
+                        <input type="color" id="gridColor" value="#333366">
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Audio Settings</h3>
+                <div class="audio-controls">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="soundEffects" checked>
+                        <span class="toggle-slider"></span>
+                        Sound Effects
+                    </label>
+                    <div class="volume-control">
+                        <label for="volumeSlider">Volume:</label>
+                        <input type="range" id="volumeSlider" min="0" max="100" value="50">
+                        <span id="volumeValue">50%</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

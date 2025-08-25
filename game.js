@@ -53,6 +53,14 @@ class GameOfLife {
         this.render();
         this.updateStats();
         this.updateCharts(); // Make sure charts are drawn initially
+        
+        // Initialize sound effects
+        this.soundEnabled = true;
+        this.soundVolume = 0.5;
+        this.initializeSounds();
+        
+        // Generate pattern thumbnails
+        this.generatePatternThumbnails();
     }
     
     createEmptyGrid() {
@@ -171,6 +179,9 @@ class GameOfLife {
             this.render();
             this.updateStats();
             this.updateCharts();
+            
+            // Play cell toggle sound
+            this.playSound(this.grid[row][col] ? 880 : 440, 0.05, 'square');
         }
     }
     
@@ -347,6 +358,104 @@ class GameOfLife {
         
         this.render();
         this.updateStats();
+    }
+    
+    initializeSounds() {
+        // Create audio context for sound effects
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (error) {
+            console.log('Web Audio API not supported');
+            this.soundEnabled = false;
+        }
+    }
+    
+    playSound(frequency, duration = 0.1, type = 'sine') {
+        if (!this.soundEnabled || !this.audioContext) return;
+        
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
+        
+        oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+        
+        // Handle unsupported wave types
+        try {
+            oscillator.type = type;
+        } catch (e) {
+            oscillator.type = 'square'; // Fallback to square wave
+        }
+        
+        gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(this.soundVolume * 0.1, this.audioContext.currentTime + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + duration);
+        
+        oscillator.start(this.audioContext.currentTime);
+        oscillator.stop(this.audioContext.currentTime + duration);
+    }
+    
+    generatePatternThumbnails() {
+        const thumbnails = document.querySelectorAll('.preset-thumbnail');
+        
+        thumbnails.forEach(thumbnail => {
+            const patternName = thumbnail.parentElement.getAttribute('data-preset');
+            const pattern = patterns[patternName];
+            
+            if (pattern) {
+                this.drawThumbnail(thumbnail, pattern);
+            }
+        });
+    }
+    
+    drawThumbnail(canvas, pattern) {
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // Clear canvas
+        ctx.fillStyle = this.colors.dead;
+        ctx.fillRect(0, 0, width, height);
+        
+        // Calculate cell size to fit pattern
+        const patternWidth = pattern[0].length;
+        const patternHeight = pattern.length;
+        const cellSize = Math.min(
+            Math.floor(width / patternWidth),
+            Math.floor(height / patternHeight),
+            8 // Maximum cell size
+        );
+        
+        // Center the pattern
+        const offsetX = (width - patternWidth * cellSize) / 2;
+        const offsetY = (height - patternHeight * cellSize) / 2;
+        
+        // Draw pattern
+        ctx.fillStyle = this.colors.alive;
+        for (let row = 0; row < patternHeight; row++) {
+            for (let col = 0; col < patternWidth; col++) {
+                if (pattern[row][col] === 1) {
+                    ctx.fillRect(
+                        offsetX + col * cellSize,
+                        offsetY + row * cellSize,
+                        cellSize - 1,
+                        cellSize - 1
+                    );
+                }
+            }
+        }
+    }
+    
+    updateColors(aliveColor, deadColor, gridColor) {
+        this.colors.alive = aliveColor;
+        this.colors.dead = deadColor;
+        this.colors.grid = gridColor;
+        
+        // Update thumbnails
+        this.generatePatternThumbnails();
+        this.render();
+        this.updateCharts();
     }
     
     getAgeColor(age) {
@@ -1031,16 +1140,19 @@ document.addEventListener('DOMContentLoaded', () => {
             game.stop();
             playPauseBtn.textContent = 'Play';
             playPauseBtn.classList.remove('active');
+            game.playSound(330, 0.15, 'triangle'); // Stop sound
         } else {
             game.start();
             playPauseBtn.textContent = 'Pause';
             playPauseBtn.classList.add('active');
+            game.playSound(523, 0.15, 'triangle'); // Play sound
         }
     });
     
     stepBtn.addEventListener('click', () => {
         if (!game.isRunning) {
             game.step();
+            game.playSound(660, 0.08, 'sine'); // Step sound
         }
     });
     
@@ -1049,10 +1161,12 @@ document.addEventListener('DOMContentLoaded', () => {
         game.reset();
         playPauseBtn.textContent = 'Play';
         playPauseBtn.classList.remove('active');
+        game.playSound(220, 0.2, 'sawtooth'); // Reset sound
     });
     
     randomBtn.addEventListener('click', () => {
         game.randomize();
+        game.playSound(1760, 0.3, 'noise'); // Random sound (will fallback to 'square' if noise not supported)
     });
     
     speedSlider.addEventListener('input', (e) => {
@@ -1360,10 +1474,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Preset pattern buttons
-    document.querySelectorAll('.preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const patternName = btn.getAttribute('data-preset');
+    // Preset pattern buttons (updated for new structure)
+    document.querySelectorAll('.preset-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const patternName = item.getAttribute('data-preset');
             const pattern = patterns[patternName];
             
             if (pattern) {
@@ -1373,6 +1487,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 game.reset();
                 game.addPattern(pattern, startRow, startCol);
+                game.playSound(440, 0.1, 'square'); // Pattern selection sound
             }
         });
     });
@@ -1807,5 +1922,125 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
         game.resizeCharts();
         game.updateCharts();
+        
+        // Initialize settings functionality after game is ready
+        initializeSettings();
     }, 100);
+    
+    function initializeSettings() {
+        // Settings modal functionality
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsModal = document.getElementById('settingsModal');
+        const closeSettings = document.getElementById('closeSettings');
+        
+        settingsBtn.addEventListener('click', () => {
+            settingsModal.style.display = 'flex';
+            game.playSound(880, 0.1, 'sine');
+        });
+        
+        closeSettings.addEventListener('click', () => {
+            settingsModal.style.display = 'none';
+        });
+        
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) {
+                settingsModal.style.display = 'none';
+            }
+        });
+
+        // Theme selection
+        document.querySelectorAll('.theme-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Remove active class from all theme buttons
+                document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // Apply theme
+                const theme = btn.getAttribute('data-theme');
+                document.body.className = `theme-${theme}`;
+                
+                // Update game colors based on theme
+                const computedStyles = getComputedStyle(document.body);
+                const aliveColor = computedStyles.getPropertyValue('--cell-alive').trim();
+                const deadColor = computedStyles.getPropertyValue('--cell-dead').trim();
+                const gridColor = computedStyles.getPropertyValue('--border-primary').trim();
+                
+                game.updateColors(aliveColor, deadColor, gridColor);
+                game.playSound(1100, 0.1, 'square');
+            });
+        });
+
+        // Color customization
+        const aliveColorPicker = document.getElementById('aliveColor');
+        const deadColorPicker = document.getElementById('deadColor');
+        const gridColorPicker = document.getElementById('gridColor');
+        
+        aliveColorPicker.addEventListener('change', (e) => {
+            game.updateColors(e.target.value, game.colors.dead, game.colors.grid);
+            game.playSound(800, 0.1, 'sine');
+        });
+        
+        deadColorPicker.addEventListener('change', (e) => {
+            game.updateColors(game.colors.alive, e.target.value, game.colors.grid);
+            game.playSound(600, 0.1, 'sine');
+        });
+        
+        gridColorPicker.addEventListener('change', (e) => {
+            game.updateColors(game.colors.alive, game.colors.dead, e.target.value);
+            game.playSound(400, 0.1, 'sine');
+        });
+
+        // Sound settings
+        const soundEffectsToggle = document.getElementById('soundEffects');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const volumeValue = document.getElementById('volumeValue');
+        
+        soundEffectsToggle.addEventListener('change', (e) => {
+            game.soundEnabled = e.target.checked;
+            if (game.soundEnabled) {
+                game.playSound(880, 0.1, 'sine');
+            }
+        });
+        
+        volumeSlider.addEventListener('input', (e) => {
+            game.soundVolume = e.target.value / 100;
+            volumeValue.textContent = e.target.value + '%';
+            game.playSound(440, 0.1, 'sine');
+        });
+
+        // Fullscreen mode
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        let isFullscreen = false;
+        
+        fullscreenBtn.addEventListener('click', () => {
+            isFullscreen = !isFullscreen;
+            
+            if (isFullscreen) {
+                document.body.classList.add('fullscreen');
+                fullscreenBtn.textContent = 'Exit Fullscreen';
+                game.playSound(1320, 0.15, 'sawtooth');
+            } else {
+                document.body.classList.remove('fullscreen');
+                fullscreenBtn.textContent = 'Fullscreen';
+                game.playSound(880, 0.15, 'sawtooth');
+            }
+            
+            // Resize canvas for fullscreen
+            setTimeout(() => {
+                game.render();
+            }, 100);
+        });
+        
+        // ESC key to exit fullscreen (separate listener to avoid conflicts)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isFullscreen) {
+                isFullscreen = false;
+                document.body.classList.remove('fullscreen');
+                fullscreenBtn.textContent = 'Fullscreen';
+                setTimeout(() => {
+                    game.render();
+                }, 100);
+            }
+        });
+    }
 });
