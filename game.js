@@ -23,6 +23,13 @@ class GameOfLife {
         this.stabilityCounter = 0;
         this.lastFewStates = [];
         
+        // Advanced features
+        this.cellAges = this.createEmptyGrid(); // Track how long cells have been alive
+        this.activityMap = this.createEmptyGrid(); // Track cell activity for heat maps
+        this.entropyHistory = [];
+        this.isDragging = false;
+        this.lastDragCell = null;
+        
         // Chart canvases
         this.populationChart = null;
         this.rateChart = null;
@@ -37,9 +44,15 @@ class GameOfLife {
         
         this.setupEventListeners();
         this.initializeCharts();
+        
+        // Initialize entropy history with first calculation
+        const initialEntropy = this.calculateEntropy();
+        this.entropyHistory.push(initialEntropy);
+        
         this.saveState(); // Save initial state
         this.render();
         this.updateStats();
+        this.updateCharts(); // Make sure charts are drawn initially
     }
     
     createEmptyGrid() {
@@ -47,11 +60,13 @@ class GameOfLife {
     }
     
     setupEventListeners() {
-        // Mouse events for cell toggling
-        this.canvas.addEventListener('click', (e) => this.handleCellClick(e));
+        // Mouse events for cell toggling and drag drawing
+        this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
         this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
         this.canvas.addEventListener('mouseleave', () => {
             this.hoverCell = null;
+            this.isDragging = false;
             this.render();
         });
         
@@ -62,15 +77,34 @@ class GameOfLife {
             const rect = this.canvas.getBoundingClientRect();
             const x = touch.clientX - rect.left;
             const y = touch.clientY - rect.top;
-            this.toggleCell(x, y);
+            this.handleTouchStart(x, y);
+        });
+        
+        this.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = this.canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            this.handleTouchMove(x, y);
+        });
+        
+        this.canvas.addEventListener('touchend', (e) => {
+            this.isDragging = false;
         });
     }
     
-    handleCellClick(e) {
+    handleMouseDown(e) {
+        this.isDragging = true;
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
-        this.toggleCell(x, y);
+        this.paintCell(x, y, true);
+    }
+    
+    handleMouseUp(e) {
+        this.isDragging = false;
+        this.lastDragCell = null;
     }
     
     handleMouseMove(e) {
@@ -83,10 +117,61 @@ class GameOfLife {
         
         if (col >= 0 && col < this.cols && row >= 0 && row < this.rows) {
             this.hoverCell = { row, col };
+            
+            // Drag drawing
+            if (this.isDragging) {
+                this.paintCell(x, y, false);
+            }
         } else {
             this.hoverCell = null;
         }
         this.render();
+    }
+    
+    handleTouchStart(x, y) {
+        this.isDragging = true;
+        this.paintCell(x, y, true);
+    }
+    
+    handleTouchMove(x, y) {
+        if (this.isDragging) {
+            this.paintCell(x, y, false);
+        }
+    }
+    
+    paintCell(x, y, isInitialClick) {
+        const col = Math.floor(x / this.cellSize);
+        const row = Math.floor(y / this.cellSize);
+        
+        if (col >= 0 && col < this.cols && row >= 0 && row < this.rows) {
+            // Avoid painting the same cell multiple times during drag
+            const cellKey = `${row},${col}`;
+            if (!isInitialClick && this.lastDragCell === cellKey) {
+                return;
+            }
+            this.lastDragCell = cellKey;
+            
+            // Toggle cell state
+            this.grid[row][col] = this.grid[row][col] ? 0 : 1;
+            
+            // Update cell age and activity
+            if (this.grid[row][col] === 1) {
+                this.cellAges[row][col] = 0; // Reset age for new cells
+            } else {
+                this.cellAges[row][col] = 0;
+            }
+            this.activityMap[row][col] = Math.min(this.activityMap[row][col] + 1, 10);
+            
+            // Update entropy when manually editing
+            if (this.entropyHistory.length > 0) {
+                const currentEntropy = this.calculateEntropy();
+                this.entropyHistory[this.entropyHistory.length - 1] = currentEntropy;
+            }
+            
+            this.render();
+            this.updateStats();
+            this.updateCharts();
+        }
     }
     
     toggleCell(x, y) {
@@ -120,6 +205,7 @@ class GameOfLife {
     
     nextGeneration() {
         const newGrid = this.createEmptyGrid();
+        const newCellAges = this.createEmptyGrid();
         let births = 0;
         let deaths = 0;
         
@@ -133,21 +219,35 @@ class GameOfLife {
                     // Live cell with 2 or 3 neighbors survives
                     if (neighbors === 2 || neighbors === 3) {
                         newGrid[row][col] = 1;
+                        newCellAges[row][col] = this.cellAges[row][col] + 1; // Age the cell
                     } else {
                         deaths++; // Cell dies
+                        this.activityMap[row][col] = Math.min(this.activityMap[row][col] + 1, 10);
                     }
                 } else {
                     // Dead cell with exactly 3 neighbors becomes alive
                     if (neighbors === 3) {
                         newGrid[row][col] = 1;
+                        newCellAges[row][col] = 0; // New cell starts at age 0
                         births++; // Cell is born
+                        this.activityMap[row][col] = Math.min(this.activityMap[row][col] + 1, 10);
                     }
+                }
+                
+                // Decay activity map
+                if (this.activityMap[row][col] > 0) {
+                    this.activityMap[row][col] = Math.max(0, this.activityMap[row][col] - 0.1);
                 }
             }
         }
         
         this.grid = newGrid;
+        this.cellAges = newCellAges;
         this.generation++;
+        
+        // Calculate entropy
+        const entropy = this.calculateEntropy();
+        this.entropyHistory.push(entropy);
         
         // Track statistics
         this.birthHistory.push(births);
@@ -193,13 +293,79 @@ class GameOfLife {
             this.grid = this.history[targetGen].map(row => [...row]);
             this.render();
             this.updateStats();
+            this.updateCharts(); // Update charts when traveling through time
             this.updateProgressBar();
         }
+    }
+    
+    calculateEntropy() {
+        let entropy = 0;
+        const totalCells = this.rows * this.cols;
+        const livingCells = this.countLivingCells();
+        
+        if (livingCells === 0 || livingCells === totalCells) {
+            return 0; // No entropy in completely ordered states
+        }
+        
+        const p1 = livingCells / totalCells; // Probability of living cell
+        const p0 = 1 - p1; // Probability of dead cell
+        
+        if (p1 > 0) entropy -= p1 * Math.log2(p1);
+        if (p0 > 0) entropy -= p0 * Math.log2(p0);
+        
+        return entropy;
+    }
+    
+    resizeGrid(newCols, newRows) {
+        const oldGrid = this.grid;
+        const oldCellAges = this.cellAges;
+        const oldActivityMap = this.activityMap;
+        
+        this.cols = newCols;
+        this.rows = newRows;
+        this.cellSize = Math.min(
+            Math.floor(this.canvas.width / this.cols),
+            Math.floor(this.canvas.height / this.rows)
+        );
+        
+        // Create new grids
+        this.grid = this.createEmptyGrid();
+        this.cellAges = this.createEmptyGrid();
+        this.activityMap = this.createEmptyGrid();
+        
+        // Copy over existing cells that fit
+        const copyRows = Math.min(oldGrid.length, this.rows);
+        const copyCols = Math.min(oldGrid[0].length, this.cols);
+        
+        for (let row = 0; row < copyRows; row++) {
+            for (let col = 0; col < copyCols; col++) {
+                this.grid[row][col] = oldGrid[row][col];
+                this.cellAges[row][col] = oldCellAges[row][col];
+                this.activityMap[row][col] = oldActivityMap[row][col];
+            }
+        }
+        
+        this.render();
+        this.updateStats();
+    }
+    
+    getAgeColor(age) {
+        // Create color gradient from cyan (young) to purple (old)
+        const maxAge = 50; // Maximum age for color scaling
+        const normalizedAge = Math.min(age / maxAge, 1);
+        
+        // Interpolate between cyan and purple
+        const r = Math.floor(0 + normalizedAge * 128); // 0 to 128
+        const g = Math.floor(217 - normalizedAge * 100); // 217 to 117  
+        const b = Math.floor(255 - normalizedAge * 100); // 255 to 155
+        
+        return `rgb(${r}, ${g}, ${b})`;
     }
     
     initializeCharts() {
         this.populationChart = document.getElementById('populationChart');
         this.rateChart = document.getElementById('rateChart');
+        this.entropyChart = document.getElementById('entropyChart');
         
         // Set proper canvas sizing
         this.resizeCharts();
@@ -231,6 +397,7 @@ class GameOfLife {
     updateCharts() {
         this.drawPopulationChart();
         this.drawRateChart();
+        this.drawEntropyChart();
         this.updateProgressBar();
     }
     
@@ -366,6 +533,68 @@ class GameOfLife {
         ctx.stroke();
     }
     
+    drawEntropyChart() {
+        const canvas = this.entropyChart;
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        
+        // Clear canvas
+        ctx.fillStyle = '#0f0f23';
+        ctx.fillRect(0, 0, width, height);
+        
+        if (this.entropyHistory.length < 2) return;
+        
+        // Draw grid
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = (height / 5) * i;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+        
+        const maxEntropy = Math.max(...this.entropyHistory);
+        const pointsToShow = Math.min(this.entropyHistory.length, 100);
+        const startIndex = Math.max(0, this.entropyHistory.length - pointsToShow);
+        
+        // Draw entropy line
+        ctx.strokeStyle = '#f39c12';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        for (let i = 0; i < pointsToShow; i++) {
+            const dataIndex = startIndex + i;
+            const x = (width / (pointsToShow - 1)) * i;
+            const y = height - ((this.entropyHistory[dataIndex] / (maxEntropy || 1)) * height);
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        
+        ctx.stroke();
+        
+        // Draw current generation marker
+        if (this.generation < this.entropyHistory.length) {
+            const currentIndex = Math.max(0, this.generation - startIndex);
+            if (currentIndex >= 0 && currentIndex < pointsToShow) {
+                const x = (width / (pointsToShow - 1)) * currentIndex;
+                const y = height - ((this.entropyHistory[this.generation] / (maxEntropy || 1)) * height);
+                
+                ctx.fillStyle = '#e94560';
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+    
     updateProgressBar() {
         const progressBar = document.getElementById('progressFill');
         const progressThumb = document.getElementById('progressThumb');
@@ -409,18 +638,30 @@ class GameOfLife {
             this.ctx.stroke();
         }
         
-        // Draw cells with glow effect
+        // Draw cells with age coloring and activity heat map
         for (let row = 0; row < this.rows; row++) {
             for (let col = 0; col < this.cols; col++) {
+                const x = col * this.cellSize + 1;
+                const y = row * this.cellSize + 1;
+                const size = this.cellSize - 2;
+                
+                // Draw activity heat map background
+                const activity = this.activityMap[row][col];
+                if (activity > 0.1) {
+                    const activityAlpha = Math.min(activity / 10, 0.3);
+                    this.ctx.fillStyle = `rgba(255, 165, 0, ${activityAlpha})`;
+                    this.ctx.fillRect(x, y, size, size);
+                }
+                
+                // Draw living cells with age coloring
                 if (this.grid[row][col] === 1) {
-                    const x = col * this.cellSize + 1;
-                    const y = row * this.cellSize + 1;
-                    const size = this.cellSize - 2;
+                    const age = this.cellAges[row][col];
+                    const color = this.getAgeColor(age);
                     
                     // Add subtle glow effect
-                    this.ctx.shadowColor = this.colors.alive;
-                    this.ctx.shadowBlur = 3;
-                    this.ctx.fillStyle = this.colors.alive;
+                    this.ctx.shadowColor = color;
+                    this.ctx.shadowBlur = 2;
+                    this.ctx.fillStyle = color;
                     this.ctx.fillRect(x, y, size, size);
                     
                     // Reset shadow
@@ -482,6 +723,12 @@ class GameOfLife {
         document.getElementById('deathRate').textContent = recentDeaths;
         document.getElementById('stability').textContent = stabilityStatus;
         
+        // Update entropy display
+        const currentEntropy = this.entropyHistory.length > 0 
+            ? this.entropyHistory[this.entropyHistory.length - 1] 
+            : 0;
+        document.getElementById('entropy').textContent = currentEntropy.toFixed(2);
+        
         this.previousPopulation = livingCells;
     }
     
@@ -505,9 +752,18 @@ class GameOfLife {
         this.populationHistory = [];
         this.birthHistory = [];
         this.deathHistory = [];
+        this.entropyHistory = [];
         this.maxPopulation = 0;
         this.stabilityCounter = 0;
         this.lastFewStates = [];
+        
+        // Reset advanced features
+        this.cellAges = this.createEmptyGrid();
+        this.activityMap = this.createEmptyGrid();
+        
+        // Initialize entropy for reset state
+        const initialEntropy = this.calculateEntropy();
+        this.entropyHistory.push(initialEntropy);
         
         this.saveState(); // Save initial empty state
         this.updateStats();
@@ -523,7 +779,14 @@ class GameOfLife {
         }
         this.generation = 0;
         this.previousPopulation = 0;
+        
+        // Reset statistics and recalculate entropy
+        this.entropyHistory = [];
+        const initialEntropy = this.calculateEntropy();
+        this.entropyHistory.push(initialEntropy);
+        
         this.updateStats();
+        this.updateCharts();
         this.render();
     }
     
@@ -733,6 +996,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const importBtn = document.getElementById('importBtn');
     const fileInput = document.getElementById('fileInput');
     
+    // Grid control elements
+    const gridWidth = document.getElementById('gridWidth');
+    const gridHeight = document.getElementById('gridHeight');
+    const applyGridBtn = document.getElementById('applyGridBtn');
+    
     // Modal elements
     const introBtn = document.getElementById('introBtn');
     const introModal = document.getElementById('introModal');
@@ -824,6 +1092,19 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Reset file input so the same file can be selected again
         e.target.value = '';
+    });
+    
+    // Grid control event listeners
+    applyGridBtn.addEventListener('click', () => {
+        const newWidth = parseInt(gridWidth.value);
+        const newHeight = parseInt(gridHeight.value);
+        
+        if (newWidth >= 20 && newWidth <= 200 && newHeight >= 20 && newHeight <= 120) {
+            game.resizeGrid(newWidth, newHeight);
+            showNotification(`Grid resized to ${newWidth}×${newHeight}`, 'success');
+        } else {
+            showNotification('Grid dimensions must be between 20-200 (width) and 20-120 (height)', 'error');
+        }
     });
     
     // Modal event listeners
@@ -1027,6 +1308,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 { color: '#00ff88', label: 'Birth Rate' },
                 { color: '#ff6b6b', label: 'Death Rate' }
             ]);
+        } else if (chartType === 'entropy') {
+            chartModalTitle.textContent = 'System Entropy Over Time';
+            setupChartLegend([
+                { color: '#f39c12', label: 'Entropy Level' }
+            ]);
         }
         
         chartModal.classList.add('active');
@@ -1069,6 +1355,8 @@ document.addEventListener('DOMContentLoaded', () => {
             drawFullscreenPopulationChart();
         } else if (currentModalChart === 'rate') {
             drawFullscreenRateChart();
+        } else if (currentModalChart === 'entropy') {
+            drawFullscreenEntropyChart();
         }
     }
     
@@ -1375,6 +1663,108 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = 0; i < game.deathHistory.length; i++) {
             const x = margin.left + (chartWidth / maxGen) * i;
             const y = height - margin.bottom - ((game.deathHistory[i] / maxRate) * chartHeight);
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+    }
+    
+    function drawFullscreenEntropyChart() {
+        const canvas = chartModalCanvas;
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        
+        // Margins for axes
+        const margin = { top: 40, right: 40, bottom: 60, left: 80 };
+        const chartWidth = width - margin.left - margin.right;
+        const chartHeight = height - margin.top - margin.bottom;
+        
+        // Clear canvas
+        ctx.fillStyle = '#0f0f23';
+        ctx.fillRect(0, 0, width, height);
+        
+        if (game.entropyHistory.length < 2) return;
+        
+        const maxEntropy = Math.max(...game.entropyHistory);
+        const maxGen = game.entropyHistory.length - 1;
+        
+        // Draw axes
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Y-axis
+        ctx.moveTo(margin.left, margin.top);
+        ctx.lineTo(margin.left, height - margin.bottom);
+        // X-axis
+        ctx.lineTo(width - margin.right, height - margin.bottom);
+        ctx.stroke();
+        
+        // Draw grid lines and labels
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = '12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        
+        // X-axis labels (generations)
+        const xSteps = Math.min(10, maxGen);
+        for (let i = 0; i <= xSteps; i++) {
+            const gen = Math.round((maxGen / xSteps) * i);
+            const x = margin.left + (chartWidth / xSteps) * i;
+            
+            // Grid line
+            ctx.beginPath();
+            ctx.moveTo(x, margin.top);
+            ctx.lineTo(x, height - margin.bottom);
+            ctx.stroke();
+            
+            // Label
+            ctx.fillText(gen.toString(), x, height - margin.bottom + 20);
+        }
+        
+        // Y-axis labels (entropy)
+        ctx.textAlign = 'right';
+        const ySteps = 8;
+        for (let i = 0; i <= ySteps; i++) {
+            const value = (maxEntropy / ySteps) * i;
+            const y = height - margin.bottom - (chartHeight / ySteps) * i;
+            
+            // Grid line
+            ctx.beginPath();
+            ctx.moveTo(margin.left, y);
+            ctx.lineTo(width - margin.right, y);
+            ctx.stroke();
+            
+            // Label
+            ctx.fillText(value.toFixed(2), margin.left - 10, y + 4);
+        }
+        
+        // Axis labels
+        ctx.textAlign = 'center';
+        ctx.font = '14px Inter, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillText('Generation', width / 2, height - 10);
+        
+        ctx.save();
+        ctx.translate(20, height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Entropy', 0, 0);
+        ctx.restore();
+        
+        // Draw entropy line
+        ctx.strokeStyle = '#f39c12';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        
+        for (let i = 0; i < game.entropyHistory.length; i++) {
+            const x = margin.left + (chartWidth / maxGen) * i;
+            const y = height - margin.bottom - ((game.entropyHistory[i] / maxEntropy) * chartHeight);
             
             if (i === 0) {
                 ctx.moveTo(x, y);
